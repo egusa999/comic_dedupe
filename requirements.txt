@@ -1,0 +1,13 @@
+# 必須(画質判定に使う)
+pillow>=10.0
+
+# 任意: 7z を読む(pure Python。外部ツール不要)
+py7zr>=0.21
+
+# 任意: rar を読む(rarfile 自体は Python だが、解凍は外部ツール or libarchive が必要)
+rarfile>=4.2
+
+# 任意: rar/7z を外部プロセス無しで読む。
+# 別途ネイティブ libarchive(Windows は archive.dll、Linux は libarchive.so)が必要。
+# Windows では pip だけでは入らないので、7-Zip/WinRAR か OS 同梱の tar.exe を使う方が簡単。
+libarchive-c>=5.0

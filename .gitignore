@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+logs/
+*_整理済み.*
+_dedupe_work_*/
