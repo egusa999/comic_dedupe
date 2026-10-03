@@ -1,49 +1,56 @@
-# comic_dedupe — 書庫内の「同じ巻の重複」整理ツール
+# comic_dedupe — Deduplicate volumes inside comic archives
 
-1 つの書庫ファイル(zip/cbz/rar/cbr/7z)やフォルダの**中**に、同じ巻が別名で混在している
-(例: `第7巻/` と `07.zip`、`第8巻.zip` と `08/`)状態を自動で整理します。
+**English** | [日本語](README.ja.md)
 
-1. 中を再帰的に走査して「巻」単位のアイテムを見つける
-2. **タイトル(作品名+巻数)のあいまい一致**で同じ巻の重複を検出する
-3. **高画質な方を残し**、負けた方は `_重複/` へ退避する
-4. 残った巻を `作品名 第NN巻/`(**画像が直下に入った巻フォルダ**)に名前を統一し(書庫は展開、フォルダ内の余計な入れ子は解消)、全体を **1 つの無圧縮 ZIP にラップ**して書き出す(巻ごとの ZIP は作らない)
-5. `--log` を付けたときだけログ(.log)と判定根拠(.csv)を出す
+Tidies up a single archive (zip/cbz/rar/cbr/7z) or folder in which **the same volume appears under different names**
+(e.g. `Vol 7/` and `07.zip`, or `Vol 8.zip` and `08/`).
 
-**原本は変更しません**(出力は `<入力名>_整理済み.rar`)。破壊的な動作は明示的なオプションのみです。
+1. Recursively scans the input and finds "volume" items
+2. Detects duplicates by **fuzzy title matching (series name + volume number)**
+3. **Keeps the higher-quality copy** and moves the loser to `_重複/` (the "duplicates" folder)
+4. Renames what is left to `<Series> 第NN巻/` (**volume folders with the images directly inside**; archives are extracted, needless nesting is flattened) and wraps everything into **one archive** (default: compressed RAR with a 5% recovery record; uncompressed ZIP if RAR cannot be created). No per-volume ZIPs are produced.
+5. Writes a log (.log) and a decision-evidence CSV only when `--log` is given
+
+**Originals are never modified** (output is `<input name>_整理済み.rar`, or `.zip` where RAR cannot be created).
+Destructive behavior requires explicit options.
+
+> Note: folder names produced by the tool (`_重複`, `_除外`, `_保留`, `_その他`, `第NN巻`) and the log/decision text are in Japanese.
+> The GUI labels can be switched to English (see below).
 
 ---
 
-## 1. 準備(Windows)
+## 1. Setup (Windows)
 
 ```bat
-py -m pip install -r requirements.txt
+git clone https://github.com/egusa999/comic_dedupe.git comic_dedupe
+py -m pip install -r comic_dedupe\requirements.txt
 ```
 
-- 必須は **Pillow** だけです(画質判定に使用)。
-- `py7zr` を入れると **7z** を追加ツール無しで読めます。
-- **rar** を読むには次のいずれかが必要です。上から順に自動検出します。
+> Keep the folder name `comic_dedupe` (the tool is started with `py -m comic_dedupe.gui`).
 
-| 優先 | バックエンド | 用意するもの |
+- **Pillow** is the only hard requirement (used for quality judgment).
+- Install `py7zr` to read **7z** with no extra tools.
+- Reading **rar** needs one of the following. They are auto-detected in this order:
+
+| Priority | Backend | What you need |
 |---|---|---|
-| 1 | `libarchive-c` | ネイティブ libarchive(Windows は `archive.dll`。conda-forge/vcpkg/MSYS2 等)。**pip だけでは入りません** |
-| 2 | `bsdtar` | **Windows 10 1803 以降に同梱の `C:\Windows\System32\tar.exe`**。Windows 11 23H2 以降は libarchive 同梱で rar も読めることが多い(起動時に `--version` で bsdtar か判定) |
-| 3 | `rarfile` + 外部ツール | 7-Zip か WinRAR をインストール(`pip install rarfile` が必要) |
-| 4 | WinRAR 系(`UnRAR.exe` / `Rar.exe`)を直接 | **インストールするだけ**で使える。RAR の公式実装で互換性が最も高い。ラップ用に入れた WinRAR をそのまま利用 |
-| 5 | 7-Zip(`7z.exe`)を直接 | **インストールするだけ**で使える(標準の場所を自動検出) |
+| 1 | `libarchive-c` | Native libarchive (`archive.dll` on Windows via conda-forge/vcpkg/MSYS2). **Not installable with pip alone** |
+| 2 | `bsdtar` | **`C:\Windows\System32\tar.exe`, bundled with Windows 10 1803+.** Windows 11 23H2+ bundles libarchive and can often read rar (bsdtar is detected via `--version` at startup) |
+| 3 | `rarfile` + external tool | Install 7-Zip or WinRAR (and `pip install rarfile`) |
+| 4 | WinRAR tools (`UnRAR.exe` / `Rar.exe`) directly | **Just install it.** The official RAR implementation, most compatible. The WinRAR installed for wrapping is reused |
+| 5 | 7-Zip (`7z.exe`) directly | **Just install it** (standard locations are auto-detected) |
 
-確認方法:
+Check:
 
 ```bat
-tar -tf "対象.rar"          :: 中身が一覧できれば OS 同梱の tar.exe で読める
+tar -tf "target.rar"          :: if the contents are listed, the bundled tar.exe can read it
 py -m comic_dedupe.cli --help
 ```
 
-RAR を読めるバックエンドが 1 つも無い場合、**rar のアイテムは判定せずそのまま通します**
-(誤って消さないための仕様です)。
+If no backend can read RAR, **RAR items are passed through untouched** (so nothing is removed by mistake).
 
-> 注意: `rarfile` のバックエンドが `bsdtar` になった環境では、書庫によって個別エントリの
-> 読み出しに失敗することがあります。その場合は自動的に次のバックエンドへ降格します。
-> 確実に rar を扱いたいときは 7-Zip か WinRAR を入れてください(`tar.exe: Archive entry has empty or unreadable filename` のように bsdtar が名前を読めない RAR も、これらなら読めます)。失敗時のエラーには、試した各バックエンドの理由が全部出ます。
+> Note: when `rarfile` ends up using `bsdtar`, reading individual entries can fail for some archives; the tool then falls back to the next backend automatically.
+> To handle RAR reliably, install 7-Zip or WinRAR (they can read RARs that bsdtar cannot, e.g. `tar.exe: Archive entry has empty or unreadable filename`). On failure, the error lists the reason for every backend that was tried.
 
 ## 2. GUI
 
@@ -51,131 +58,124 @@ RAR を読めるバックエンドが 1 つも無い場合、**rar のアイテ�
 py -m comic_dedupe.gui
 ```
 
-- 右下の **Language / 言語** で表示を日本語 / English に切り替えられます(選択は `~/.comic_dedupe/settings.json` に保存)。
-  対象はGUIの文言のみで、ログ本文・判定理由は日本語です。文言の追加は `i18n.py` の `STRINGS` に ja/en を併記します。
-- **「書庫を追加…」** で書庫ファイルを複数選択、**「フォルダを追加…」** でフォルダ単位の指定ができます
-  (混在リストも可)。各入力は独立したジョブとして順番に処理されます。
-- **「解析のみ」** を押すと、ファイルを一切変更せずに検出結果・勝敗予定を一覧表示します。
-- 類似度が中間の「グレーゾーン」は `☐` で表示されます。クリックして `☑` にしたものだけが、
-  次の **「実行」** で同一巻として処理されます(あいまい一致の誤爆はここで止められます)。
-- 「ログ(.log/.csv)を出力する」にチェックを入れたときだけログファイルが作られます(出力先欄が空ならアプリ本体フォルダ内の `logs/`)。
-- 設定は `%USERPROFILE%\.comic_dedupe\settings.json` に保存されます。
+- Use **Language / 言語** at the bottom right to switch the display between Japanese and English (the choice is saved in `~/.comic_dedupe/settings.json`).
+  Only GUI labels are translated; log text and decision reasons stay in Japanese. To add strings, put both `ja` and `en` entries in `STRINGS` in `i18n.py`.
+- **"Add archives…"** selects multiple archive files and **"Add folder…"** selects a folder (mixed lists are fine). Each input is processed as an independent job, in order.
+- **"Analyze"** shows detected duplicates and planned winners without changing any file.
+- Gray-zone pairs (medium similarity) are shown with `☐`. Only those you click to `☑` are treated as the same volume on the next **"Run"** (this is where you stop fuzzy-match false positives).
+- Log files are created only if "Write logs (.log/.csv)" is checked (an empty folder field means `logs/` next to the app).
+- Settings are stored in `%USERPROFILE%\.comic_dedupe\settings.json`.
 
 ## 3. CLI
 
 ```bat
-py -m comic_dedupe.cli "D:\comics\作品名まとめ.zip" --log
-py -m comic_dedupe.cli "D:\comics\作品名" --dry-run
+py -m comic_dedupe.cli "D:\comics\Series.zip" --log
+py -m comic_dedupe.cli "D:\comics\Series" --dry-run
 py -m comic_dedupe.cli "D:\comics\A.zip" "D:\comics\B" --log "D:\logs"
 ```
 
-| オプション | 意味 |
+| Option | Meaning |
 |---|---|
-| `--log [DIR]` | ログと判定根拠 CSV を出力(DIR 省略時はアプリ本体フォルダ内の `logs/`)。**既定では出力しない** |
-| `--verbose` | 各ページの計測値まで詳細ログ |
-| `--dry-run` | 判定だけ行い、ファイルを一切変更しない |
-| `--delete-losers` | 負けた巻を退避せず削除(復元不可) |
-| `--wrap-format rar\|zip` | ラップ書庫の形式。既定 `rar`(圧縮 + リカバリーレコード)。**RAR を作れるのは WinRAR の `Rar.exe`(または `rar`)だけ**で、7-Zip では作れない。見つからない/失敗したときは警告して ZIP(無圧縮)で出力 |
-| `--rar-level N` | RAR の圧縮レベル(0=無圧縮〜5=最大、既定 3=標準)。画像は元々圧縮済みなので上げても縮みは小さい |
-| `--recovery-percent N` | RAR のリカバリーレコード割合(%、0〜10、0 で付加しない、既定 5) |
-| `--wrap-zip` | 従来形式: 名前を統一せず元の階層のまま、巻をフォルダ→圧縮ZIP化(無圧縮ZIPは圧縮し直し)して全体を無圧縮 ZIP でラップ |
-| `--replace` | 検証成功後に原本を出力で置き換える |
-| `--in-place` | フォルダ入力を作業領域へコピーせず直接操作(高速・原本変更) |
-| `--rar-to-zip` | (`--wrap-zip` 時のみ有効)残した rar も圧縮 ZIP に作り直す |
-| `--verify-content` | 同一巻と判定した組の内容(ページの dHash)も照合し、一致率が低ければ保留にする |
-| `--sample N` | 画質計測に使うページ数(既定 16) |
-| `--quality-margin F` | この相対差以内は同等とみなす(既定 0.05) |
-| `--series-similarity F` | 自動で同一作品と判定する類似度(既定 0.85) |
-| `--series-review F` | 保留(要確認)にする類似度の下限(既定 0.65) |
-| `--accept-review` | グレーゾーンも自動処理する |
-| `--alias-file PATH` | 作品名エイリアス JSON(`{"ワンピース": ["ONE PIECE"]}`) |
+| `--log [DIR]` | Write the log and evidence CSV (`logs/` next to the app if DIR is omitted). **Off by default** |
+| `--verbose` | Detailed log including per-page measurements |
+| `--dry-run` | Judge only; change no files |
+| `--delete-losers` | Delete losing volumes instead of setting them aside (irreversible) |
+| `--wrap-format rar\|zip` | Wrapper archive format. Default `rar` (compressed + recovery record). **Only WinRAR's `Rar.exe` (or `rar`) can create RAR**, not 7-Zip. If it is missing or fails, a warning is shown and an uncompressed ZIP is written |
+| `--rar-level N` | RAR compression level (0 = store … 5 = max, default 3). Images are already compressed, so higher levels save little |
+| `--recovery-percent N` | RAR recovery record percentage (0–10, 0 = none, default 5) |
+| `--wrap-zip` | Legacy layout: keep the original hierarchy and names, zip each volume (compressed), and wrap everything in an uncompressed ZIP |
+| `--replace` | After successful verification, replace the original with the output |
+| `--in-place` | Operate on a folder input directly instead of copying it to the work area (fast, modifies the original) |
+| `--rar-to-zip` | (with `--wrap-zip` only) rebuild kept rar files as compressed ZIP |
+| `--verify-content` | Also compare the content (page dHash) of pairs judged the same volume; hold them if the match rate is low |
+| `--sample N` | Pages sampled for quality measurement (default 16) |
+| `--quality-margin F` | Relative difference within which two copies count as equal (default 0.05) |
+| `--series-similarity F` | Similarity at which two series are auto-judged the same (default 0.85) |
+| `--series-review F` | Lower bound of similarity for "needs review" (default 0.65) |
+| `--accept-review` | Also auto-process gray-zone pairs |
+| `--alias-file PATH` | Series-name alias JSON (`{"ワンピース": ["ONE PIECE"]}`) |
 | `--rar-backend` | `auto` / `libarchive` / `bsdtar` / `rarfile` |
-| `--work-dir PATH` | 作業領域を作る親フォルダ。未指定時は RAM ディスク(`/dev/shm`、Linux のみ)→ ローカル一時フォルダ → 入力と同じ場所の順。Windows でメモリ上に作るにはRAMディスクのドライブを指定 |
-| `--no-retry-overflow` | 最大巻数チェックによる再判定を行わない |
-| `--dup-dir-name NAME` | 退避先フォルダ名(既定 `_重複`) |
-| `--keep-work-dir` | 作業領域を残す(調査用) |
+| `--work-dir PATH` | Parent folder for the work area. Default order: RAM disk (`/dev/shm`, Linux only) → local temp folder → next to the input. On Windows, give a RAM-disk drive to work in memory |
+| `--no-retry-overflow` | Disable the re-judgment triggered by the max-volume check |
+| `--dup-dir-name NAME` | Name of the folder for losers (default `_重複`) |
+| `--keep-work-dir` | Keep the work area (for investigation) |
 
-終了コード: `0` 正常 / `1` 入力エラー / `2` 完了したが保留・スキップあり。
+Exit codes: `0` OK / `1` input error / `2` finished, but some items were held or skipped.
 
-## 4. 判定ルール
+## 4. Judgment rules
 
-### 重複検出(タイトルのあいまい一致)
+### Duplicate detection (fuzzy title match)
 
-1. `NFKC` 正規化・小文字化、カタカナ→ひらがな、記号と空白の除去
-2. ノイズ除去: 配布サイト名(`DLRAW.TO_` `13DL.APP-`)、`[作者名]`、`(DL版)`、`(完)`、解像度タグ(`1600x2300`)、`第1刷` など
-3. **話数は巻と別扱い**: `ch658` `ch658-671` `chapter 12` `第12話` `第12-15話` は「話数」として認識し、巻とは混ぜない(同じ話数/範囲どうしだけ重複判定。出力名は `作品名 ch658-671`)。範囲が部分的に重なる書庫(`ch669-680` と `ch680-689`)は別物として両方残す
-4. 巻数抽出(末尾の ` (2)` は Windows のコピー連番として、他に巻数が取れる場合は無視): `第07巻` `第7巻` `7巻` `vol.7` `v07` `(7)` `[7]` `#7` `上巻/下巻` `前編/後編`、
-   末尾の裸の数字(`作品名 07`、`07`)、`8_files`(`N_files`)、`1-10`・`v01-04`・`v01-10b`(範囲は単巻と別扱い)
-5. 巻数が一致した組だけ、作品名の類似度を `SequenceMatcher` / 文字 bigram の Dice 係数 / 部分一致の
-   最大値で評価
-   - `>= 0.85` → 自動で同一巻
-   - `0.65 〜 0.85` → **保留**(GUI で承認、または `--accept-review`)
-   - 両方とも作品名が取れない(`第7巻` と `07`)→ 同一巻として扱う
-   - 片方だけ作品名がある → 保留。ただし同じフォルダ内の作品名がすべて同じ(1 作品)なら、作品名の無い巻(`8_files`・`07.zip`)はその作品名を引き継いで同一巻として扱う
-   - `完全版`/`新装版`/`カラー版` などの**版違いワードが違う組は別作品**
+1. `NFKC` normalization, lowercasing, katakana → hiragana, removal of symbols and spaces
+2. Noise removal: distribution-site prefixes (`DLRAW.TO_`, `13DL.APP-`, `DLRAW.APP_`, `13DL.ME_`, `MANGA-ZIP.APP_`), `[author]`, `(DL版)`, `(完)`, resolution tags (`1600x2300`), `第1刷`, etc.
+3. **Chapters are separate from volumes**: `ch658`, `ch658-671`, `chapter 12`, `第12話`, `第12-15話` are recognized as chapters and never mixed with volumes (only identical chapters/ranges are compared; output name `<Series> ch658-671`). Partially overlapping ranges (`ch669-680` and `ch680-689`) are different and both are kept.
+4. Volume number extraction (a trailing ` (2)` is ignored as a Windows copy counter when another number is found): `第07巻`, `第7巻`, `7巻`, `vol.7`, `v07`, `(7)`, `[7]`, `#7`, `上巻/下巻`, `前編/後編`, a bare trailing number (`Series 07`, `07`), `8_files` (`N_files`), `1-10` / `v01-04` / `v01-10b` (ranges are distinct from single volumes). Ranges that cannot be valid (`04-00`, `00-01`) are treated as "no volume number".
+5. Only pairs with the same volume number are compared by series-name similarity: the maximum of `SequenceMatcher`, character-bigram Dice coefficient and substring match
+   - `>= 0.85` → automatically the same volume
+   - `0.65 – 0.85` → **held** (approve in the GUI, or `--accept-review`)
+   - neither has a series name (`第7巻` vs `07`) → treated as the same volume
+   - only one has a series name → held; but if every series name in the same folder is identical (one series), nameless volumes (`8_files`, `07.zip`) inherit it and count as the same volume
+   - pairs that differ in **edition words** (`完全版`, `新装版`, `カラー版`, …) are different works
+6. Mojibake names (CP932 mis-decoded as CP437/CP850/CP1252) are repaired before judging.
 
-### 再判定(最大巻数チェック)
+### Re-judgment (max-volume check)
 
-フォルダごとに「残った巻グループ数」が「推定最大巻数(単巻の最大巻数)」を超えると、同じ巻が
-作品名の表記違い(ローマ字/日本語など)で別グループに残っているとみなし、**作品名を無視して
-同じ巻数・同じ版を統合**し直します。同一フォルダに別作品が混在している場合は誤統合の恐れが
-あるため `--no-retry-overflow` で無効化できます(原本は残るので非破壊)。
+If the number of remaining volume groups in a folder exceeds the estimated maximum volume number, the same volume is assumed to remain in separate groups because of different spellings (romaji vs. Japanese, etc.). The series name is then **ignored and volumes with the same number and edition are merged**. Because this can wrongly merge different series that share a folder, `--no-retry-overflow` disables it (originals are kept, so it is non-destructive).
 
-### 画質判定(残す方の決め方)
+### Quality judgment (which copy to keep)
 
-1. **ページ画素数の中央値**(解像度が高い方)
-2. **bytes/pixel**(圧縮が緩い=劣化が少ない方)
-3. **総バイト数**
+1. **Median pixel count per page** (higher resolution wins)
+2. **bytes/pixel** (looser compression = less degradation)
+3. **Total bytes**
 
-ページ数は判定に使いません(別版でページ数が違うのは普通のため)。
+Page count is not used (different editions normally differ in page count).
 
-**中身が極端に少ない・小さいものの除外**: (1) 同じ重複グループ内で、最大のページ数の 30% 未満、または総バイト数の 25% 未満の候補は勝者候補から外して `_重複/` へ。(2) 同じフォルダ・作品全体の単巻(4 件以上)の中央値の 25% 未満(または 4 倍超)のアイテムも勝者候補から外す。範囲表記(`第33-34巻`)は「巻数 × 中央値」と比べる。(3) 重複が無くても外れ値なら、巻としては並べず原本の名前のまま `_除外/` に入れる(雑誌などの別物・欠けの疑い。警告も出る)。話数の書庫は対象外。しきい値は `constants.py` の `OUTLIER_*` / `GROUP_*`。
+**Excluding implausibly small items**: (1) within a duplicate group, candidates below 30% of the largest page count or 25% of total bytes are removed from winner candidates and moved to `_重複/`. (2) Items below 25% (or above 4×) of the median single-volume size of the whole folder/series (4+ volumes) are also excluded; ranges (`第33-34巻`) are compared against "volumes × median". (3) Outliers without a duplicate are not placed as volumes but go to `_除外/` under their original name (magazines or truncated files; a warning is shown). Chapter archives are exempt. Thresholds: `OUTLIER_*` / `GROUP_*` in `constants.py`.
 
-相対差が `--quality-margin`(既定 5%)以内なら同等として次の指標へ進みます。
-全指標同等なら「書庫種別(zip > 7z > rar > フォルダ)→ 名前の情報量 → 名前順」で決定し、理由を記録します。
+If the relative difference is within `--quality-margin` (5%), the copies are equal and the next metric is used.
+If all metrics tie, the decision falls back to "archive type (zip > 7z > rar > folder) → informativeness of the name → name order", and the reason is recorded.
 
-### 名前の統一と平坦出力(既定)
+### Name unification and flat output (default)
 
-- ラップは RAR5(`rar a -r -m3 -ma5 -ep1 -s- -rr5p`。ソリッドにしない)で作り、直後に `rar t` で検証します。リカバリーレコードは書庫の一部が壊れたとき WinRAR の「修復」で直せる冗長データです
+- The wrapper is RAR5 (`rar a -r -m3 -ma5 -ep1 -s- -rr5p`, non-solid) and is verified right afterwards with `rar t`. The recovery record is redundant data that lets WinRAR's "Repair" fix a partly damaged archive.
+- The wrapper is built and verified in the local work area and moved to the destination once (building directly on a NAS was slow).
+- A volume is named `<Series> 第NN巻` (folder). The series name is decided by majority vote among the original names of volumes judged to be the same series (author names, `(DL版)`, resolution tags are removed); the volume number is zero-padded to the maximum volume (minimum 2 digits).
+- Volumes without a series name (`07.zip`) take the series name with the most volumes; archives without a volume number keep their original name.
+- `_保留/` ("held") receives items that are duplicates but could not be ranked because the RAR was unreadable, and items whose unified name collides with another volume — under their original names.
+- The top level of the wrapper contains only volume folders (plus `_重複/` `_除外/` `_保留/` `_その他/`), with images directly inside each. Only volumes that cannot be extracted stay as archives with the unified name + original extension. Losers go to `_重複/`; non-volume files (covers, text, …) are collected flat in `_その他/`.
 
-- 名前は `作品名 第NN巻.zip`。作品名は同じ作品と見なせる巻の元の名前から多数決で決め(作者名・`(DL版)`・解像度タグ等は除去)、巻数は最大巻数に合わせてゼロ埋め(最小2桁)。`
-- 作品名の取れない巻(`07.zip`)には最も巻数の多い作品名を、巻数が取れない書庫は元の名前をそのまま使う
-- `_保留/` には、同じ巻の重複なのに RAR が読めず勝敗が付かなかったものと、統一名が他の巻と衝突したもの(以前は `第01巻 (2)` として並んでいた)を、原本の名前のまま入れます。
-- ラップ書庫の直下は巻フォルダのみ(`_重複/` `_除外/` `_保留/` `_その他/` を除く)(各巻フォルダの直下に画像)。書庫が展開できない巻だけ、統一名+元の拡張子の書庫のまま置く。敗者は `_重複/`、巻として扱えなかったファイル(表紙・テキスト等)は `_その他/` に**階層なし**で集める
-- 名前が短くなるため長パス警告も出にくくなる
+### Cases that are not touched (held)
 
-### 動かさない(保留にする)ケース
+- The archive cannot be read / contains no images / quality cannot be measured
+- The volume number cannot be determined
+- Series-name similarity is in the gray zone (not approved)
+- With `--verify-content`, the content match rate is below 0.6
 
-- 書庫を読めない / 画像が無い / 画質を計測できない
-- 巻数が判定できない
-- 作品名の類似度がグレーゾーン(未承認)
-- `--verify-content` 時に内容の一致率が 0.6 未満
+## 5. Module layout
 
-## 5. モジュール構成
-
-| ファイル | 責務 |
+| File | Responsibility |
 |---|---|
-| `constants.py` | しきい値・拡張子・フォルダ名などの定数(**数値はここだけ**) |
-| `models.py` | 受け渡し用のデータ構造 |
-| `logging_setup.py` | ロガー構築(`--log` 指定時のみファイル出力)と CSV 書き出し |
-| `external_tools.py` | バックエンド検出(libarchive / bsdtar / unrar・7z / py7zr) |
-| `archives.py` | 書庫・フォルダを同一インターフェースで読む(失敗時は次のバックエンドへ降格) |
-| `discovery.py` | 作業ツリーから巻アイテムを同定(入れ子対応) |
-| `naming.py` | タイトル正規化・巻数抽出 |
-| `matching.py` | あいまい照合とグループ化(Union-Find) |
-| `pages.py` | ページ列挙・サンプリング・計測・dHash |
-| `quality.py` | 画質スコアリングと勝者選定 |
-| `layout.py` | 敗者の退避(移動 / 削除) |
-| `repack.py` | ZIP 生成(ラップ=無圧縮 / `--wrap-zip` の巻=圧縮)と検証 |
-| `unify.py` | 統一名(`作品名 第NN巻.zip`)の決定 |
-| `pipeline.py` | 1 入力 = 1 ジョブのオーケストレーション |
-| `cli.py` / `gui.py` | フロントエンド(判定ロジックは持たない) |
+| `constants.py` | Thresholds, extensions, folder names (**numbers live only here**) |
+| `models.py` | Data structures passed between modules |
+| `logging_setup.py` | Logger setup (file output only with `--log`) and CSV writer |
+| `external_tools.py` | Backend detection (libarchive / bsdtar / unrar, 7z / py7zr) |
+| `archives.py` | Reads archives and folders through one interface (falls back to the next backend on failure) |
+| `discovery.py` | Identifies volume items in the work tree (nested aware) |
+| `naming.py` | Title normalization, volume-number extraction, mojibake repair |
+| `matching.py` | Fuzzy matching and grouping (Union-Find) |
+| `pages.py` | Page listing, sampling, measurement, dHash |
+| `quality.py` | Quality scoring and winner selection |
+| `layout.py` | Moving / deleting losers |
+| `repack.py` | Creating and verifying the wrapper archive (RAR / ZIP) and `--wrap-zip` volume ZIPs |
+| `unify.py` | Deciding unified names (`<Series> 第NN巻`) |
+| `i18n.py` | Japanese / English switching for GUI labels |
+| `pipeline.py` | Orchestration (one input = one job) |
+| `cli.py` / `gui.py` | Front ends (no judgment logic) |
 
-## 6. テスト
+## 6. Tests
 
 ```bash
 python3 -m unittest discover -s comic_dedupe/tests -t .
 ```
 
-合成データ(Pillow で生成)で、あいまい一致・画質判定・退避・無圧縮 ZIP 化・dry-run の
-非破壊性・原本の無傷までエンドツーエンドに検証します。
+Synthetic data (generated with Pillow) is used to verify, end to end, fuzzy matching, quality judgment, moving losers, ZIP creation, the non-destructiveness of `--dry-run`, and that originals stay intact.
