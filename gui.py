@@ -80,6 +80,7 @@ class DedupeApp(ttk.Frame):
         self.var_review = tk.DoubleVar(value=C.SERIES_SIMILARITY_REVIEW)
         self.var_status = tk.StringVar(value=t("status.idle"))
         self.var_language = tk.StringVar(value=i18n.DEFAULT_LANGUAGE)
+        self.var_folder_lang = tk.StringVar(value=C.FOLDER_LANG_DEFAULT)
 
     def _build_widgets(self) -> None:
         self.master.title(t("title"))
@@ -153,6 +154,13 @@ class DedupeApp(ttk.Frame):
         ttk.Checkbutton(
             middle, text=t("opt.accept_review"), variable=self.var_accept_review
         ).grid(row=4, column=0, sticky="w")
+        folder_row = ttk.Frame(middle)
+        folder_row.grid(row=5, column=0, sticky="w")
+        ttk.Label(folder_row, text=t("opt.folder_lang")).pack(side="left")
+        for code, label in ((C.FOLDER_LANG_JA, "日本語"), (C.FOLDER_LANG_EN, "English")):
+            ttk.Radiobutton(
+                folder_row, text=label, value=code, variable=self.var_folder_lang
+            ).pack(side="left", padx=4)
 
         right = ttk.Frame(frame)
         right.grid(row=0, column=2, sticky="nw")
@@ -396,6 +404,7 @@ class DedupeApp(ttk.Frame):
             series_similarity=float(self.var_similarity.get()),
             series_review=float(self.var_review.get()),
             accept_review=self.var_accept_review.get(),
+            folder_lang=self.var_folder_lang.get(),
             approved_pairs=approved,
         )
         options.validate()
@@ -580,6 +589,7 @@ class DedupeApp(ttk.Frame):
         self.var_similarity.set(float(data.get("similarity", C.SERIES_SIMILARITY_MIN)))
         self.var_review.set(float(data.get("review", C.SERIES_SIMILARITY_REVIEW)))
         self.var_language.set(str(data.get("language", i18n.DEFAULT_LANGUAGE)))
+        self.var_folder_lang.set(str(data.get("folder_lang", C.FOLDER_LANG_DEFAULT)))
 
     def save_settings(self) -> None:
         path = settings_path()
@@ -594,6 +604,7 @@ class DedupeApp(ttk.Frame):
             "similarity": float(self.var_similarity.get()),
             "review": float(self.var_review.get()),
             "language": self.var_language.get(),
+            "folder_lang": self.var_folder_lang.get(),
         }
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -37,6 +37,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "opt.rar_to_zip": {"ja": "rar も無圧縮 ZIP に作り直す", "en": "Rebuild RARs as uncompressed ZIP too"},
     "opt.verify_content": {"ja": "内容(ページ画像)も照合する", "en": "Also compare content (page images)"},
     "opt.accept_review": {"ja": "グレーゾーンも自動処理する", "en": "Auto-process gray-zone pairs too"},
+    "opt.folder_lang": {"ja": "出力のフォルダ名", "en": "Output folder names"},
     "opt.sample": {"ja": "画質計測ページ数", "en": "Pages sampled for quality"},
     "opt.margin": {"ja": "画質マージン", "en": "Quality margin"},
     "opt.similarity": {"ja": "作品名類似度(自動)", "en": "Title similarity (auto)"},

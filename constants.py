@@ -263,6 +263,34 @@ CJK_RANGE_END = 0x9FFF
 UNIFIED_NAME_TEMPLATE = "{series} 第{volume}巻"
 UNIFIED_NAME_TEMPLATE_NO_SERIES = "第{volume}巻"
 
+#: 出力のフォルダ・ファイル名の言語。既定は日本語。`--folder-lang en` / GUI で英語表記にできる
+FOLDER_LANG_JA = "ja"
+FOLDER_LANG_EN = "en"
+FOLDER_LANG_DEFAULT = FOLDER_LANG_JA
+
+#: 言語ごとの出力フォルダ名・サフィックス・統一名の書式
+#: (キー: dup=負けた巻 / excluded=外れ値 / pending=保留 / other=巻でないファイル / suffix=出力名 / volume・volume_no_series=巻の書式)
+FOLDER_NAMES = {
+    FOLDER_LANG_JA: {
+        "dup": DUP_DIR_NAME,
+        "excluded": EXCLUDED_DIR_NAME,
+        "pending": PENDING_DIR_NAME,
+        "other": OTHER_DIR_NAME,
+        "suffix": OUTPUT_SUFFIX,
+        "volume": UNIFIED_NAME_TEMPLATE,
+        "volume_no_series": UNIFIED_NAME_TEMPLATE_NO_SERIES,
+    },
+    FOLDER_LANG_EN: {
+        "dup": "_duplicates",
+        "excluded": "_excluded",
+        "pending": "_held",
+        "other": "_others",
+        "suffix": "_organized",
+        "volume": "{series} Vol {volume}",
+        "volume_no_series": "Vol {volume}",
+    },
+}
+
 #: ファイル名に使えない文字(Windows 基準)
 INVALID_FILENAME_CHARS = '<>:"/\\|?*'
 

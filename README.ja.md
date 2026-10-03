@@ -97,7 +97,8 @@ py -m comic_dedupe.cli "D:\comics\A.zip" "D:\comics\B" --log "D:\logs"
 | `--rar-backend` | `auto` / `libarchive` / `bsdtar` / `rarfile` |
 | `--work-dir PATH` | 作業領域を作る親フォルダ。未指定時は RAM ディスク(`/dev/shm`、Linux のみ)→ ローカル一時フォルダ → 入力と同じ場所の順。Windows でメモリ上に作るにはRAMディスクのドライブを指定 |
 | `--no-retry-overflow` | 最大巻数チェックによる再判定を行わない |
-| `--dup-dir-name NAME` | 退避先フォルダ名(既定 `_重複`) |
+| `--folder-lang ja\|en` | 出力のフォルダ名・巻名の言語。`ja`(既定): `_重複` `_除外` `_保留` `_その他` `第NN巻` `_整理済み`、`en`: `_duplicates` `_excluded` `_held` `_others` `<作品名> Vol NN` `_organized`(GUI は「出力のフォルダ名」で選択) |
+| `--dup-dir-name NAME` | 退避先フォルダ名(既定 `_重複`、`--folder-lang en` なら `_duplicates`) |
 | `--keep-work-dir` | 作業領域を残す(調査用) |
 
 終了コード: `0` 正常 / `1` 入力エラー / `2` 完了したが保留・スキップあり。

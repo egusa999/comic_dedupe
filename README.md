@@ -14,8 +14,8 @@ Tidies up a single archive (zip/cbz/rar/cbr/7z) or folder in which **the same vo
 **Originals are never modified** (output is `<input name>_整理済み.rar`, or `.zip` where RAR cannot be created).
 Destructive behavior requires explicit options.
 
-> Note: folder names produced by the tool (`_重複`, `_除外`, `_保留`, `_その他`, `第NN巻`) and the log/decision text are in Japanese.
-> The GUI labels can be switched to English (see below).
+> Note: by default the folder names produced by the tool (`_重複`, `_除外`, `_保留`, `_その他`, `第NN巻`, `_整理済み`) and the log/decision text are in Japanese.
+> Use `--folder-lang en` (GUI: "Output folder names → English") to get `_duplicates`, `_excluded`, `_held`, `_others`, `<Series> Vol NN` and `_organized` instead. The GUI labels can also be switched to English (see below).
 
 ---
 
@@ -97,7 +97,8 @@ py -m comic_dedupe.cli "D:\comics\A.zip" "D:\comics\B" --log "D:\logs"
 | `--rar-backend` | `auto` / `libarchive` / `bsdtar` / `rarfile` |
 | `--work-dir PATH` | Parent folder for the work area. Default order: RAM disk (`/dev/shm`, Linux only) → local temp folder → next to the input. On Windows, give a RAM-disk drive to work in memory |
 | `--no-retry-overflow` | Disable the re-judgment triggered by the max-volume check |
-| `--dup-dir-name NAME` | Name of the folder for losers (default `_重複`) |
+| `--folder-lang ja\|en` | Language of output folder/volume names. `ja` (default): `_重複` `_除外` `_保留` `_その他` `第NN巻` `_整理済み`; `en`: `_duplicates` `_excluded` `_held` `_others` `<Series> Vol NN` `_organized` |
+| `--dup-dir-name NAME` | Name of the folder for losers (default `_重複`, or `_duplicates` with `--folder-lang en`) |
 | `--keep-work-dir` | Keep the work area (for investigation) |
 
 Exit codes: `0` OK / `1` input error / `2` finished, but some items were held or skipped.

@@ -96,6 +96,7 @@ def plan_names(
     fallback_series: str = "",
     threshold: float = C.SERIES_SIMILARITY_MIN,
     aliases: Optional[dict] = None,
+    folder_lang: str = C.FOLDER_LANG_DEFAULT,
 ) -> dict[int, str]:
     """残す各アイテム(`id(item)`)の統一名(拡張子なし)を返す。巻数不明と、複数巻が混在する imageset は含めない。
 
@@ -103,6 +104,7 @@ def plan_names(
     """
 
     aliases = aliases or {}
+    names = C.FOLDER_NAMES.get(folder_lang, C.FOLDER_NAMES[C.FOLDER_LANG_DEFAULT])
     universe = list(survivors)
     known = {id(item) for item in universe}
     for group in linked_groups:
@@ -141,7 +143,7 @@ def plan_names(
                 series=series, chapter=format_volume(item.title.volume, chapter_digits)
             )
         else:
-            template = C.UNIFIED_NAME_TEMPLATE if series else C.UNIFIED_NAME_TEMPLATE_NO_SERIES
+            template = names["volume"] if series else names["volume_no_series"]
             stem = template.format(series=series, volume=format_volume(item.title.volume, digits))
         plan[id(item)] = stem
     return plan

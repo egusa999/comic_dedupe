@@ -41,7 +41,7 @@ class JobOptions:
     rar_to_zip: bool = False
     verify_content: bool = False
     work_dir: Optional[Path] = None
-    dup_dir_name: str = C.DUP_DIR_NAME
+    dup_dir_name: Optional[str] = None  # None なら folder_lang の既定名
     aliases: dict = field(default_factory=dict)
     rar_backend: str = "auto"
     sample_pages: int = C.SAMPLE_PAGES
@@ -50,7 +50,8 @@ class JobOptions:
     series_review: float = C.SERIES_SIMILARITY_REVIEW
     accept_review: bool = False
     approved_pairs: set = field(default_factory=set)
-    output_suffix: str = C.OUTPUT_SUFFIX
+    output_suffix: Optional[str] = None  # None なら folder_lang の既定名
+    folder_lang: str = C.FOLDER_LANG_DEFAULT
     keep_work_dir: bool = False
     retry_overflow: bool = True
     flatten_output: bool = True
@@ -58,7 +59,23 @@ class JobOptions:
     recovery_percent: int = C.RAR_RECOVERY_PERCENT
     rar_level: int = C.RAR_COMPRESSION_LEVEL
 
+    def __post_init__(self) -> None:
+        names = C.FOLDER_NAMES.get(self.folder_lang)
+        if names is not None:
+            if self.dup_dir_name is None:
+                self.dup_dir_name = names["dup"]
+            if self.output_suffix is None:
+                self.output_suffix = names["suffix"]
+
+    @property
+    def names(self) -> dict:
+        """出力フォルダ名などの表記(`folder_lang` に対応)。"""
+
+        return C.FOLDER_NAMES[self.folder_lang]
+
     def validate(self) -> None:
+        if self.folder_lang not in C.FOLDER_NAMES:
+            raise ValueError(f"--folder-lang は {' / '.join(C.FOLDER_NAMES)} のいずれかを指定してください")
         if self.sample_pages < 1:
             raise ValueError("--sample は 1 以上を指定してください")
         if not 0.0 <= self.quality_margin < 1.0:
@@ -295,7 +312,7 @@ class Pipeline:
                 and path not in failed
                 and is_archive(path)
                 and self._is_range_title(path.name)
-                and C.DUP_DIR_NAME not in path.relative_to(self._work_root).parts
+                and self.options.dup_dir_name not in path.relative_to(self._work_root).parts
             ]
             if not containers:
                 return
@@ -381,7 +398,7 @@ class Pipeline:
                 for item in group.items:
                     if id(item) in outliers:
                         where = (
-                            f"出力では {C.EXCLUDED_DIR_NAME}/ に入れます"
+                            f"出力では {self.options.names["excluded"]}/ に入れます"
                             if self.options.flatten_output
                             else "そのまま残します"
                         )
@@ -607,6 +624,7 @@ class Pipeline:
             fallback_series=naming.display_series(stem),
             threshold=self.options.series_similarity,
             aliases=self.options.aliases,
+            folder_lang=self.options.folder_lang,
         )
         undecided_ids = {id(item) for decision in decisions for item in decision.undecided}
         used_names: set[str] = set()
@@ -615,23 +633,23 @@ class Pipeline:
             self._notify("巻フォルダの作成", index, len(survivors))
             if id(item) in self._outliers:
                 reason = f"サイズ外れ値のため除外: {self._outliers[id(item)]}"
-                actions.append(self._place_aside(item, out_dir / C.EXCLUDED_DIR_NAME, reason))
+                actions.append(self._place_aside(item, out_dir / self.options.names["excluded"], reason))
                 continue
             stem_name = plan.get(id(item))
             if id(item) in undecided_ids:
                 reason = "同じ巻の重複だが計測できず勝敗が付かなかったため保留"
-                actions.append(self._place_aside(item, out_dir / C.PENDING_DIR_NAME, reason))
+                actions.append(self._place_aside(item, out_dir / self.options.names["pending"], reason))
                 continue
             if stem_name and stem_name.casefold() in used_names:
                 reason = f"統一名「{stem_name}」が他の巻と衝突(同じ巻の未判定の重複)のため保留"
-                actions.append(self._place_aside(item, out_dir / C.PENDING_DIR_NAME, reason))
+                actions.append(self._place_aside(item, out_dir / self.options.names["pending"], reason))
                 continue
             if stem_name:
                 used_names.add(stem_name.casefold())
             actions.append(self._place_volume(item, out_dir, stem_name))
 
         self._flatten_directory(self._work_root / self.options.dup_dir_name, out_dir / self.options.dup_dir_name)
-        self._flatten_leftovers(self._work_root, out_dir / C.OTHER_DIR_NAME)
+        self._flatten_leftovers(self._work_root, out_dir / self.options.names["other"])
         try:
             out_path = self._write_wrapper(out_dir, input_path)
         finally:

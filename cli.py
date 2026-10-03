@@ -47,8 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     output.add_argument("--verbose", action="store_true", help="詳細ログ(各ページの計測値まで)")
     output.add_argument(
         "--output-suffix",
-        default=C.OUTPUT_SUFFIX,
-        help=f"出力 ZIP のサフィックス(既定: {C.OUTPUT_SUFFIX})",
+        default=None,
+        help=f"出力のサフィックス(既定: {C.OUTPUT_SUFFIX}、--folder-lang en なら {C.FOLDER_NAMES['en']['suffix']})",
     )
 
     behaviour = parser.add_argument_group("動作")
@@ -160,8 +160,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     paths.add_argument(
         "--dup-dir-name",
-        default=C.DUP_DIR_NAME,
-        help=f"負けた巻をまとめるフォルダ名(既定: {C.DUP_DIR_NAME})",
+        default=None,
+        help=f"負けた巻をまとめるフォルダ名(既定: {C.DUP_DIR_NAME}、--folder-lang en なら {C.FOLDER_NAMES['en']['dup']})",
+    )
+    paths.add_argument(
+        "--folder-lang",
+        choices=sorted(C.FOLDER_NAMES),
+        default=C.FOLDER_LANG_DEFAULT,
+        help="出力のフォルダ名・巻名の言語(ja: _重複 / 第NN巻、en: _duplicates / Vol NN。既定 ja)",
     )
     paths.add_argument(
         "--alias-file", type=Path, default=None, help='作品名エイリアス JSON({"代表名": ["別表記"]})'
@@ -211,6 +217,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             verify_content=args.verify_content,
             work_dir=args.work_dir,
             dup_dir_name=args.dup_dir_name,
+            folder_lang=args.folder_lang,
             aliases=aliases,
             rar_backend=args.rar_backend,
             sample_pages=args.sample,
